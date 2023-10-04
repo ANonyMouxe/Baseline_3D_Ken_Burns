@@ -80,15 +80,6 @@ def calculate_ssim(img1, img2):
 ##########################################################
 
 
-dataset = 'TAMULF'
-arguments_strIn = '/media/data/prasan/datasets/LF_datasets/'
-arguments_strOut = 'TAMULF.mp4'
-filenames_file = 'aryan_test_inputs/{}/test_files.txt'.format(dataset)
-height = 256  # 
-width = 192
-doTime = True
-color_corr = True
-
 for strOption, strArgument in getopt.getopt(sys.argv[1:], '', [ strParameter[2:] + '=' for strParameter in sys.argv[1::2] ])[0]:
 	if strOption == '--in' and strArgument != '': arguments_strIn = strArgument # path to the input image
 	if strOption == '--out' and strArgument != '': arguments_strOut = strArgument # path to where the output should be stored
@@ -98,122 +89,138 @@ for strOption, strArgument in getopt.getopt(sys.argv[1:], '', [ strParameter[2:]
 
 
 if __name__ == '__main__':
-	with open(filenames_file, 'r') as f:
-		filenames = f.readlines()
-	idxs = range(len(filenames))
+	datasets = ['Kalantari', 'Stanford', 'TAMULF', 'Hybrid']
+	arguments_strIn = '/media/data/prasan/datasets/LF_datasets/'
 
-	save_path = 'test_results'
-	os.makedirs(save_path, exist_ok=True)
-	f = open(os.path.join(save_path, f'{height}x{width}_{dataset}_results.txt'), 'w')
-	psnr_avg = RunningAverage()
-	ssim_avg = RunningAverage()
-	all_times = []
-	with tqdm(enumerate(idxs), total=len(idxs), desc='Testing - {}'.format(dataset)) as vepoch:
-		for i, idx in vepoch:
-			file_path = filenames[idx][:-1]
-			# print(arguments_strIn, file_path)
-			lf = np.load(os.path.join(arguments_strIn, file_path))
-			# print(lf.shape)
-			
-			if color_corr:
-				lf = lf / 255.
-				mean = lf.mean()
-				fact = np.log(0.4) / np.log(mean)
-				if fact<1:
-					lf = lf ** fact
-				lf = np.uint8(255 * lf)
+	# Resolution setting:
+	heights = [188, 192, 384, 480]
+	widths = [270, 192, 528, 640]
 
-			if lf.shape[4] == 3:
-				lf = lf.transpose([0, 1, 4, 2, 3])
-			else:
-				lf = lf.transpose([0, 1, 2, 3, 4])
-			#print(lf.shape)
-			X, Y, C, H, W = lf.shape
-			lf = lf.reshape(X*Y, C, H, W)
-			npyLightField = np.zeros([X*Y, height, width, C])
-			
-			for j in range(X*Y):
-				img = lf[j]
-				img = np.transpose(img, [1, 2, 0])
-				img = cv2.resize(src=img, dsize=(width, height), fx=0.0, fy=0.0, interpolation=cv2.INTER_LINEAR)
-				npyLightField[j, ...] = img
-			
-			npyImage = npyLightField[X*Y//2, ...]
+	doTime = True
+	color_corr = True
 
-			intWidth = npyImage.shape[1]
-			intHeight = npyImage.shape[0]
-	
-			fltRatio = float(intWidth) / float(intHeight)
+	for bimbim_boombam in range(len(heights)):
+		height = heights[bimbim_boombam]
+		width = widths[bimbim_boombam]
+		for dataset in datasets:
+			filenames_file = 'aryan_test_inputs/{}/test_files.txt'.format(dataset)
+			arguments_strOut = f'{dataset}.mp4'
+			with open(filenames_file, 'r') as f:
+				filenames = f.readlines()
+			idxs = range(len(filenames))
 
-			# intWidth = min(int(1024 * fltRatio), 1024)
-			# intHeight = min(int(1024 / fltRatio), 1024)
+			save_path = 'test_results'
+			os.makedirs(save_path, exist_ok=True)
+			f = open(os.path.join(save_path, f'{height}x{width}_{dataset}_results.txt'), 'w')
+			psnr_avg = RunningAverage()
+			ssim_avg = RunningAverage()
+			all_times = []
+			with tqdm(enumerate(idxs), total=len(idxs), desc='Testing - {}'.format(dataset)) as vepoch:
+				for i, idx in vepoch:
+					file_path = filenames[idx][:-1]
+					# print(arguments_strIn, file_path)
+					lf = np.load(os.path.join(arguments_strIn, file_path))
+					# print(lf.shape)
 
-			npyImage = cv2.resize(src=npyImage, dsize=(intWidth, intHeight), fx=0.0, fy=0.0, interpolation=cv2.INTER_AREA)
+					if color_corr:
+						lf = lf / 255.
+						mean = lf.mean()
+						fact = np.log(0.4) / np.log(mean)
+						if fact<1:
+							lf = lf ** fact
+						lf = np.uint8(255 * lf)
 
-			process_load(npyImage, {})
-			# print('1. Loaded image')
-			starttime = time.time()
+					if lf.shape[4] == 3:
+						lf = lf.transpose([0, 1, 4, 2, 3])
+					else:
+						lf = lf.transpose([0, 1, 2, 3, 4])
+					#print(lf.shape)
+					X, Y, C, H, W = lf.shape
+					lf = lf.reshape(X*Y, C, H, W)
+					npyLightField = np.zeros([X*Y, height, width, C])
 
-			objFrom = {
-				'fltCenterU': intWidth / 2.0,
-				'fltCenterV': intHeight / 2.0,
-				'intCropWidth': int(math.floor(0.97 * intWidth)),
-				'intCropHeight': int(math.floor(0.97 * intHeight))
-			}
-			# print('1.5 objFrom done')
+					for j in range(X*Y):
+						img = lf[j]
+						img = np.transpose(img, [1, 2, 0])
+						img = cv2.resize(src=img, dsize=(width, height), fx=0.0, fy=0.0, interpolation=cv2.INTER_LINEAR)
+						npyLightField[j, ...] = img
 
-			objTo = process_autozoom({
-				'fltShift': 100.0,
-				'fltZoom': 1.25,
-				'objFrom': objFrom
-			})
-			# print('2. Autozoom done')
+					npyImage = npyLightField[X*Y//2, ...]
 
-			npyResult = process_kenburns({
-				'fltSteps': numpy.linspace(0.0, 1, 49).tolist(),
-				'objFrom': objFrom,
-				'objTo': objTo,
-				'boolInpaint': True
-			})
-			total_time = time.time() - starttime
-			all_times.append(total_time)
+					intWidth = npyImage.shape[1]
+					intHeight = npyImage.shape[0]
 
-			# print('3. 3D Ken Burns done')
-			# print(np.array(npyResult).shape)
-			
-			# Use for saving video
-			# moviepy.editor.ImageSequenceClip(sequence=[ npyFrame[:, :, ::-1] for npyFrame in npyResult + list(reversed(npyResult))[1:-1] ], fps=25).write_videofile(arguments_strOut)
-			# moviepy.editor.ImageSequenceClip(sequence=[ npyFrame[:, :, ::-1] for npyFrame in npyLightField], fps=25).write_videofile("orig_"+arguments_strOut)
+					fltRatio = float(intWidth) / float(intHeight)
 
-			npyResult = np.array(npyResult)
+					# intWidth = min(int(1024 * fltRatio), 1024)
+					# intHeight = min(int(1024 / fltRatio), 1024)
 
-			# npyReconsLightField = np.concatenate(npyResult, axis=0)
-			# print(npyReconsLightField.shape, npyLightField.shape) # will fail here
+					npyImage = cv2.resize(src=npyImage, dsize=(intWidth, intHeight), fx=0.0, fy=0.0, interpolation=cv2.INTER_AREA)
 
-			psnr = calculate_psnr(npyLightField, npyResult)
-			ssim = calculate_ssim(npyLightField, npyResult)
+					process_load(npyImage, {})
+					# print('1. Loaded image')
+					starttime = time.time()
 
-			psnr_avg.append(psnr)
-			ssim_avg.append(ssim)
+					objFrom = {
+						'fltCenterU': intWidth / 2.0,
+						'fltCenterV': intHeight / 2.0,
+						'intCropWidth': int(math.floor(0.97 * intWidth)),
+						'intCropHeight': int(math.floor(0.97 * intHeight))
+					}
+					# print('1.5 objFrom done')
 
-			# lf_paths, img_paths = get_paths(save_path, i, 1)
-			# imageio.imwrite(img_paths[0], np.uint8(npyImage))
+					objTo = process_autozoom({
+						'fltShift': 100.0,
+						'fltZoom': 1.25,
+						'objFrom': objFrom
+					})
+					# print('2. Autozoom done')
 
-			# save_video_from_lf(npyReconsLightField, lf_paths[0])
+					npyResult = process_kenburns({
+						'fltSteps': numpy.linspace(0.0, 1, 49).tolist(),
+						'objFrom': objFrom,
+						'objTo': objTo,
+						'boolInpaint': True
+					})
+					total_time = time.time() - starttime
+					all_times.append(total_time)
 
-			vepoch.set_postfix(PSNR="{:0.4f}({:0.4f})".format(psnr_avg.get_value(), psnr),
-								SSIM="{:0.4f}({:0.4f})".format(ssim_avg.get_value(), ssim))
+					# print('3. 3D Ken Burns done')
+					# print(np.array(npyResult).shape)
 
-			string = 'Sample {0:2d} => PSNR: {1:.4f}, SSIM: {2:.4f}, Time: {3:.4f}\n'.format(i, psnr, ssim, total_time)
+					# Use for saving video
+					# moviepy.editor.ImageSequenceClip(sequence=[ npyFrame[:, :, ::-1] for npyFrame in npyResult + list(reversed(npyResult))[1:-1] ], fps=25).write_videofile(arguments_strOut)
+					# moviepy.editor.ImageSequenceClip(sequence=[ npyFrame[:, :, ::-1] for npyFrame in npyLightField], fps=25).write_videofile("orig_"+arguments_strOut)
+
+					npyResult = np.array(npyResult)
+
+					# npyReconsLightField = np.concatenate(npyResult, axis=0)
+					# print(npyReconsLightField.shape, npyLightField.shape) # will fail here
+
+					psnr = calculate_psnr(npyLightField, npyResult)
+					ssim = calculate_ssim(npyLightField, npyResult)
+
+					psnr_avg.append(psnr)
+					ssim_avg.append(ssim)
+
+					# lf_paths, img_paths = get_paths(save_path, i, 1)
+					# imageio.imwrite(img_paths[0], np.uint8(npyImage))
+
+					# save_video_from_lf(npyReconsLightField, lf_paths[0])
+
+					vepoch.set_postfix(PSNR="{:0.4f}({:0.4f})".format(psnr_avg.get_value(), psnr),
+										SSIM="{:0.4f}({:0.4f})".format(ssim_avg.get_value(), ssim))
+
+					string = 'Sample {0:2d} => PSNR: {1:.4f}, SSIM: {2:.4f}, Time: {3:.4f}\n'.format(i, psnr, ssim, total_time)
+					f.write(string)
+					#break
+
+			avg_psnr = psnr_avg.get_value()
+			avg_ssim = ssim_avg.get_value()
+			avg_time = np.mean(all_times)
+			string = 'Average PSNR: {0:.4f}\nAverage SSIM: {1:.4f} Average Time: {2:.4f}\n'.format(avg_psnr, avg_ssim, avg_time)
 			f.write(string)
-			#break
+			f.close()
 
-	avg_psnr = psnr_avg.get_value()
-	avg_ssim = ssim_avg.get_value()
-	avg_time = np.mean(all_times)
-	string = 'Average PSNR: {0:.4f}\nAverage SSIM: {1:.4f} Average Time: {2:.4f}\n'.format(avg_psnr, avg_ssim, avg_time)
-	f.write(string)
-	f.close()
-
-	#moviepy.editor.ImageSequenceClip(sequence=[ npyFrame[:, :, ::-1] for npyFrame in npyResult + list(reversed(npyResult))[1:] ], fps=5).write_videofile(arguments_strOut)
+		#moviepy.editor.ImageSequenceClip(sequence=[ npyFrame[:, :, ::-1] for npyFrame in npyResult + list(reversed(npyResult))[1:] ], fps=5).write_videofile(arguments_strOut)
 # end
